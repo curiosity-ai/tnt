@@ -12,3 +12,4 @@ obj/
 /tmp/
 /tnt/Properties/launchSettings.json
 *.user
+*.idea
