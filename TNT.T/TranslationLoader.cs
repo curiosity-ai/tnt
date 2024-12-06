@@ -2,10 +2,11 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Json;
+using System.Text.Json;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace TNT
 {
@@ -26,7 +27,7 @@ namespace TNT
                    .Select(language => Path.Combine(baseDirectory, ".tnt-content/" + language + ".tnt"))
                    .Where(File.Exists)
                    .Select(path => File.ReadAllText(path, Encoding.UTF8))
-                   .Select(JsonValue.Parse)
+                   .Select(text => JsonDocument.Parse(text, new JsonDocumentOptions { AllowTrailingCommas = true }))
                    .SelectMany(GetTranslationPairs);
 
             var table = new Dictionary<string, string>();
@@ -65,11 +66,12 @@ namespace TNT
                     yield return l;
         }
 
-        static (string, string)[] GetTranslationPairs(JsonValue value)
+        static (string, string)[] GetTranslationPairs(JsonDocument value)
         {
-            return ((JsonArray)value)
-               .Select(pair => ((string)pair[0], (string)pair[1]))
-               .ToArray();
+            throw new NotImplementedException();
+//            return value.RootElement.EnumerateArray()
+//               .Select(v => (v., (string)pair[1]))
+//               .ToArray();
         }
     }
 }

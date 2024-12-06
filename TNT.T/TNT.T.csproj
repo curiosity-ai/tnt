@@ -1,20 +1,9 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <Version>1.0.1</Version>
-    <Title>Marker and Translation Assembly for The .NET Translation Tool</Title>
-    <Description>Add this assembly to your project to mark and translate strings.</Description>
-    <Authors>Armin Sander</Authors>
-    <Copyright>(c) 2020 Armin Sander</Copyright>
-    <PackageProjectUrl>https://github.com/pragmatrix/tnt</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/pragmatrix/tnt.git</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <RootNamespace>TNT</RootNamespace>
-  </PropertyGroup>
-  <PropertyGroup>
-    <!-- Disable Paket restore under NCrunch build -->
-    <PaketRestoreDisabled Condition="'$(NCrunch)' == '1'">True</PaketRestoreDisabled>
-  </PropertyGroup>
-  <Import Project="..\.paket\Paket.Restore.targets" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
 </Project>

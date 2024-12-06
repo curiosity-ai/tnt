@@ -1,35 +1,44 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-  </PropertyGroup>
-  <ItemGroup>
-    <Compile Include="Toolbox.fs" />
-    <Compile Include="Json.fs" />
-    <Compile Include="Output.fs" />
-    <Compile Include="Model.fs" />
-    <Compile Include="Formatting.fs" />
-    <Compile Include="StringExtractor.fs" />
-    <Compile Include="Paths.fs" />
-    <Compile Include="SystemCultures.fs" />
-    <Compile Include="Commands.fs" />
-    <Compile Include="Sources.fs" />
-    <Compile Include="Verification.fs" />
-    <Compile Include="Translation.fs" />
-    <Compile Include="ExportModel.fs" />
-    <Compile Include="XLIFF.fs" />
-    <Compile Include="Excel.fs" />
-    <Compile Include="ImportExport.fs" />
-    <Compile Include="FileSystem.fs" />
-    <Compile Include="MachineTranslation.fs" />
-    <Compile Include="MachineTranslation.Google.fs" />
-    <Compile Include="APIHelper.fs" />
-    <Compile Include="API.fs" />
-    <None Include="paket.references" />
-  </ItemGroup>
-  <PropertyGroup>
-    <!-- Disable Paket restore under NCrunch build -->
-    <PaketRestoreDisabled Condition="'$(NCrunch)' == '1'">True</PaketRestoreDisabled>
-  </PropertyGroup>
-  <Import Project="..\.paket\Paket.Restore.targets" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="Toolbox.fs" />
+        <Compile Include="Json.fs" />
+        <Compile Include="Output.fs" />
+        <Compile Include="Model.fs" />
+        <Compile Include="Formatting.fs" />
+        <Compile Include="StringExtractor.fs" />
+        <Compile Include="Paths.fs" />
+        <Compile Include="SystemCultures.fs" />
+        <Compile Include="Commands.fs" />
+        <Compile Include="Sources.fs" />
+        <Compile Include="Verification.fs" />
+        <Compile Include="Translation.fs" />
+        <Compile Include="ExportModel.fs" />
+        <Compile Include="XLIFF.fs" />
+        <Compile Include="Excel.fs" />
+        <Compile Include="ImportExport.fs" />
+        <Compile Include="FileSystem.fs" />
+        <Compile Include="MachineTranslation.fs" />
+        <Compile Include="MachineTranslation.Google.fs" />
+        <Compile Include="APIHelper.fs" />
+        <Compile Include="API.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Chiron" Version="6.3.1" />
+      <PackageReference Include="ClosedXML" Version="0.104.2" />
+      <PackageReference Include="Google.Cloud.Translate.V3" Version="3.9.0" />
+      <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+      <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../FunToolBox/FunToolbox/FunToolbox.fsproj" />
+    </ItemGroup>
+    
 </Project>

@@ -1,4 +1,4 @@
-﻿open System
+open System
 open TNT.Model
 open TNT.Library
 open TNT.Library.Output

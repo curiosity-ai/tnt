@@ -19,7 +19,7 @@ let All =
              EnglishName = CultureName(culture.EnglishName) }
     |> Seq.toList
 
-let ByTag = All |> Seq.map ^ fun li -> li.Tag, li |> Map.ofSeq
+let ByTag = All |> Seq.map (fun li -> li.Tag, li) |> Map.ofSeq
 
 /// Returns the name of a language tag in English.
 let tryGetName (language: LanguageTag) : CultureName option =

@@ -89,7 +89,7 @@ let syncContent (languages: LanguageTag list) (cache: Translation list) =
             Set.difference translations contents, Set.intersect contents translations, Set.difference contents translations
 
         let resolveTranslation =
-            let map = cache |> Seq.map ^ fun t -> translationPath t.Language, t |> Map.ofSeq
+            let map = cache |> Seq.map (fun t -> translationPath t.Language, t) |> Map.ofSeq
 
             fun (path: Translation rpath) ->
                 match map.TryFind path with

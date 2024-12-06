@@ -80,9 +80,9 @@ let generate (file: File<ExportUnit>) : Excel =
                 ||| XLSheetProtectionElements.FormatRows
                 ||| XLSheetProtectionElements.SelectUnlockedCells
 
-        ws.Cell(1, SourceColumn).Value <- sprintf "%s" (file.SourceLanguage.Formatted)
-        ws.Cell(1, ChangedColumn).Value <- sprintf "%s%s" (file.TargetLanguage.Formatted) ChangedPostfix
-        ws.Cell(1, CurrentColumn).Value <- sprintf "%s%s" (file.TargetLanguage.Formatted) CurrentPostfix
+        ws.Cell(1, SourceColumn).Value <- XLCellValue.op_Implicit (sprintf "%s" (file.SourceLanguage.Formatted))
+        ws.Cell(1, ChangedColumn).Value <- XLCellValue.op_Implicit (sprintf "%s%s" (file.TargetLanguage.Formatted) ChangedPostfix)
+        ws.Cell(1, CurrentColumn).Value <- XLCellValue.op_Implicit (sprintf "%s%s" (file.TargetLanguage.Formatted) CurrentPostfix)
         ws.Cell(1, StateColumn).Value <- "State"
         ws.Cell(1, ContextsColumn).Value <- "Contexts"
         ws.Cell(1, NotesColumn).Value <- "Notes"
@@ -98,7 +98,7 @@ let generate (file: File<ExportUnit>) : Excel =
                do
                    let cell = ws.Cell(row, SourceColumn)
                    cell.Value <- tu.Source
-                   cell.DataType <- XLDataType.Text
+                   // cell.DataType <- XLDataType.Text
 
                    cell.Style.Alignment.WrapText <- true
                    cell.Style.Alignment.Vertical <- XLAlignmentVerticalValues.Center
@@ -107,7 +107,7 @@ let generate (file: File<ExportUnit>) : Excel =
                do
                    let cell = ws.Cell(row, ChangedColumn)
                    cell.Value <- ""
-                   cell.DataType <- XLDataType.Text
+                   // cell.DataType <- XLDataType.Text
 
                    cell.Style.Alignment.WrapText <- true
                    cell.Style.Alignment.Vertical <- XLAlignmentVerticalValues.Center
@@ -118,7 +118,7 @@ let generate (file: File<ExportUnit>) : Excel =
                do
                    let cell = ws.Cell(row, CurrentColumn)
                    cell.Value <- tu.Target
-                   cell.DataType <- XLDataType.Text
+                   // cell.DataType <- XLDataType.Text
 
                    cell.Style.Alignment.WrapText <- true
                    cell.Style.Alignment.Vertical <- XLAlignmentVerticalValues.Center
@@ -127,7 +127,7 @@ let generate (file: File<ExportUnit>) : Excel =
                do
                    let cell = ws.Cell(row, StateColumn)
                    cell.Value <- TargetState.toString tu.State
-                   cell.DataValidation.List(StateValidationList, true)
+                   cell.CreateDataValidation().List(StateValidationList, true)
 
                    cell.Style.Alignment.Vertical <- XLAlignmentVerticalValues.Center
 
@@ -136,8 +136,8 @@ let generate (file: File<ExportUnit>) : Excel =
                // contexts
                do
                    let cell = ws.Cell(row, ContextsColumn)
-                   cell.Value <- tu.Contexts |> String.concat "\n"
-                   cell.DataType <- XLDataType.Text
+                   cell.Value <- XLCellValue.op_Implicit (tu.Contexts |> String.concat "\n")
+                   // cell.DataType <- XLDataType.Text
 
                    cell.Style.Alignment.WrapText <- true
                    cell.Style.Alignment.Vertical <- XLAlignmentVerticalValues.Center
@@ -147,8 +147,8 @@ let generate (file: File<ExportUnit>) : Excel =
 
                    let cell = ws.Cell(row, NotesColumn)
                    // two newlines for note separation (because notes may consist of multiple lines).
-                   cell.Value <- tu.Notes |> String.concat "\n\n"
-                   cell.DataType <- XLDataType.Text
+                   cell.Value <- XLCellValue.op_Implicit (tu.Notes |> String.concat "\n\n")
+                   // cell.DataType <- XLDataType.Text
 
                    cell.Style.Alignment.WrapText <- true
                    cell.Style.Alignment.Vertical <- XLAlignmentVerticalValues.Center

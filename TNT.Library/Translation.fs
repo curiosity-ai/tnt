@@ -227,7 +227,7 @@ module Translation =
     /// Update the translation's original strings and return the translation if it changed.
     let update (strings: OriginalStrings) (translation: Translation) : Translation option =
 
-        let recordMap = translation.Records |> Seq.map ^ fun r -> r.Original, r |> Map.ofSeq
+        let recordMap = translation.Records |> Seq.map (fun r -> r.Original, r) |> Map.ofSeq
 
         let records, unusedMap =
             (recordMap, OriginalStrings.strings strings)

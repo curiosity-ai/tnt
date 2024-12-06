@@ -1,51 +1,56 @@
 ﻿namespace TNT.Library
 
+open System.Text.Json
+open System.Text.Json.Nodes
 open TNT.Model
-open System.Json
 open Chiron
 
 module Sources =
 
     let deserialize (json: string) : Sources =
-        let value = JsonValue.Parse json
+        let doc = JsonNode.Parse(json)
 
-        let str (value: JsonValue) : string = JsonValue.op_Implicit (value)
+        let str (node: JsonNode) : string = node.GetValue<string>()
 
-        let parseAssemblySource (value: JsonValue) : Source =
-            AssemblySource(RPath.parse (str value.["path"]))
+        let parseAssemblySource (node: JsonNode) : Source =
+            AssemblySource(RPath.parse (str node["path"]))
 
-        let parseSource (value: JsonArray) : Source =
-            if value.Count <> 2 then
+        let parseSource (node: JsonNode) : Source =
+            if node.AsArray().Count <> 2 then
                 failwithf "a source must have a type and a content object"
 
-            match str value.[0] with
-            | "assembly" -> parseAssemblySource value.[1]
+            match str node.[0] with
+            | "assembly" -> parseAssemblySource node.[1]
             | unknown -> failwithf "unsupported source type: '%s'" unknown
 
-
-        let language = str value.["language"] |> LanguageTag
-
-        let sources =
-            value.["sources"] :?> JsonArray |> Seq.map (unbox >> parseSource) |> Seq.toList
+        let language = str doc["language"] |> LanguageTag
+        let sources = doc["sources"].AsArray() |> Seq.map parseSource |> Seq.toList
 
         { Language = language
           Sources = sources |> Set.ofList }
 
     let serialize (sources: Sources) : string =
+        let options = JsonSerializerOptions(WriteIndented = true)
 
-        let inline str (v: 'v) = v |> string |> String
-
-        let src name properties =
-            Json.array [ String name; Json.object properties ]
-
-        let sourceJson (source: Source) =
+        let sourceToJsonNode (source: Source) =
             match source with
-            | AssemblySource path -> src "assembly" [ "path", str path ]
+            | AssemblySource path ->
+                let arr = JsonArray()
+                arr.Add("assembly")
+                let props = JsonObject()
+                props.Add("path", string path)
+                arr.Add(props)
+                arr
 
-        Json.object
-            [ "language", str sources.Language
-              "sources", Json.array (sources.Sources |> Seq.map sourceJson) ]
-        |> Json.formatWith JsonFormattingOptions.Pretty
+        let root = JsonObject()
+        root.Add("language", string sources.Language)
+
+        let sourcesArray = JsonArray()
+        sources.Sources |> Set.toSeq |> Seq.iter (sourceToJsonNode >> sourcesArray.Add)
+
+        root.Add("sources", sourcesArray)
+
+        root.ToJsonString(options)
 
 [<AutoOpen>]
 module SourceExtensions =

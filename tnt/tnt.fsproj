@@ -1,8 +1,8 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <PackageId>tnt-cli</PackageId>
     <Version>1.1.0</Version>
     <Title>The .NET Translation Tool</Title>
@@ -14,17 +14,20 @@
     <RepositoryType>git</RepositoryType>
     <PackAsTool>true</PackAsTool>
     <RollForward>Major</RollForward>
+    <RootNamespace>TNT</RootNamespace>
   </PropertyGroup>
+
   <ItemGroup>
-    <Compile Include="Program.fs" />
-    <None Include="paket.references" />
+    <PackageReference Include="CommandLineParser.FSharp" Version="2.9.1"/>
   </ItemGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\TNT.Library\TNT.Library.fsproj" />
+    <ProjectReference Include="../FunToolBox/FunToolbox/FunToolbox.fsproj"/>
+    <ProjectReference Include="../TNT.Library/TNT.Library.fsproj"/>
   </ItemGroup>
-  <PropertyGroup>
-    <!-- Disable Paket restore under NCrunch build -->
-    <PaketRestoreDisabled Condition="'$(NCrunch)' == '1'">True</PaketRestoreDisabled>
-  </PropertyGroup>
-  <Import Project="..\.paket\Paket.Restore.targets" />
+
+  <ItemGroup>
+    <Compile Include="Program.fs"/>
+  </ItemGroup>
+
 </Project>

@@ -1,7 +1,7 @@
 ﻿module TNT.Library.MachineTranslation.Google
 
 open System.IO
-open System.Json
+open System.Text.Json
 open TNT.Model
 open TNT.Library
 open Google.Cloud.Translate.V3
@@ -54,8 +54,11 @@ let Translator =
                 if not ^ File.Exists credentials_path then
                     failwithf "The %s environment variable points to '%s', but this file does not exist." AppCredentialsEnv credentials_path
 
-                let credentials = File.ReadAllText credentials_path |> JsonValue.Parse
-                let projectId: string = credentials.["project_id"] |> JsonValue.op_Implicit
+                let jsonDocument = File.ReadAllText credentials_path |> JsonDocument.Parse
+
+                let projectId: string =
+                    jsonDocument.RootElement.GetProperty("project_id").GetString()
+
                 "projects/" + projectId
 
             let client = TranslationServiceClient.Create()
