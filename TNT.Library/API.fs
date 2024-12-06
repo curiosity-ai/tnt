@@ -12,448 +12,486 @@ open TNT.Library.MachineTranslation
 open TNT.Library.APIHelper
 
 /// Initialize TNT.
-let init (language: LanguageTag option) = output {
-    let path = Directory.current() |> Path.extend Sources.path 
-    match! tryLoadSources() with
-    | None ->
-        Path.ensureDirectoryOfPathExists path
-        yield I ^ sprintf "Initializing '%s'" (string TNT.Subdirectory)
-        Sources.save path {
-            Language = defaultArg language Sources.DefaultLanguage
-            Sources = Set.empty
+let init (language: LanguageTag option) =
+    output {
+        let path = Directory.current () |> Path.extend Sources.path
+
+        match! tryLoadSources () with
+        | None ->
+            Path.ensureDirectoryOfPathExists path
+            yield I ^ sprintf "Initializing '%s'" (string TNT.Subdirectory)
+
+            Sources.save
+                path
+                { Language = defaultArg language Sources.DefaultLanguage
+                  Sources = Set.empty }
+
+        | Some sources ->
+            match language with
+            | Some l when l <> sources.Language ->
+                do! warnIfUnsupported l
+
+                yield
+                    I
+                    ^ sprintf "Changing source language from %s to %s" sources.Language.Formatted l.Formatted
+
+                Sources.save path { sources with Language = l }
+            | _ -> ()
+
+        return Ok()
+    }
+
+let status (verbose: bool) =
+    withSourcesAndGroup
+    ^ fun sources group ->
+        output {
+
+            if verbose then
+                do! printProperties 0 sources.Format
+
+            match TranslationGroup.translations group with
+            | [] -> yield I ^ "No translations, use 'tnt add' to add one."
+            | translations ->
+                for translation in translations do
+                    yield I ^ Translation.status translation
+
+            return Ok()
         }
 
-    | Some sources -> 
-        match language with
-        | Some l when l <> sources.Language ->
-            do! warnIfUnsupported l
-            yield I ^ sprintf "Changing source language from %s to %s" sources.Language.Formatted l.Formatted
-            Sources.save path { sources with Language = l }
-        | _ -> ()
-
-    return Ok()
-}
-
-let status (verbose: bool) = 
-    withSourcesAndGroup ^ fun sources group -> output {
-
-    if verbose then
-        do! printProperties 0 sources.Format
-
-    match TranslationGroup.translations group with
-    | [] -> 
-        yield I ^ "No translations, use 'tnt add' to add one."
-    | translations ->
-        for translation in translations do
-            yield I ^ Translation.status translation
-
-    return Ok()
-}
-
 /// Add a new language.
-let addLanguage (language: LanguageTag) = 
-    withGroup ^ fun group -> output {
+let addLanguage (language: LanguageTag) =
+    withGroup
+    ^ fun group ->
+        output {
 
-    do! warnIfUnsupported language
+            do! warnIfUnsupported language
 
-    let translations = 
-        group
-        |> TranslationGroup.addLanguage language
-        |> Option.toList
-        
-    do! commitTranslations "added" translations
-    return Ok()
-}
+            let translations = group |> TranslationGroup.addLanguage language |> Option.toList
+
+            do! commitTranslations "added" translations
+            return Ok()
+        }
 
 /// Add a new assembly.
-let addAssembly (assemblyPath: AssemblySource rpath) = 
-    withSources ^ fun sources -> output {
+let addAssembly (assemblyPath: AssemblySource rpath) =
+    withSources
+    ^ fun sources ->
+        output {
 
-    let assemblySource = AssemblySource(assemblyPath)
+            let assemblySource = AssemblySource(assemblyPath)
 
-    if sources.Sources.Contains assemblySource 
-    then
-        yield I ^ sprintf "Assembly '%s' is already listed as a translation source." (string assemblyPath)
-        return Ok()
-    else
+            if sources.Sources.Contains assemblySource then
+                yield
+                    I
+                    ^ sprintf "Assembly '%s' is already listed as a translation source." (string assemblyPath)
 
-    yield I ^ sprintf "Adding '%s' as translation source, use 'tnt extract' to update the translation files." (string assemblyPath)
+                return Ok()
+            else
 
-    let sourcesPath = Directory.current() |> Path.extend Sources.path
-    Sources.save sourcesPath { 
-        sources with 
-            Sources = Set.add assemblySource sources.Sources 
-    }
-    return Ok()
-}
+                yield
+                    I
+                    ^ sprintf "Adding '%s' as translation source, use 'tnt extract' to update the translation files." (string assemblyPath)
 
-let removeAssembly (assemblyPath: AssemblySource rpath) = 
-    withSources ^ fun sources -> output {
+                let sourcesPath = Directory.current () |> Path.extend Sources.path
 
-    let matches = 
-        sources.Sources
-        |> Seq.choose ^ function
-            | AssemblySource path ->
-                let pathsToCompare = 
-                    RPath.parts path
-                    |> List.subs
-                    |> List.map RPath.ofParts
-                if pathsToCompare |> List.contains assemblyPath 
-                then Some ^ AssemblySource path
-                else None
-        |> Seq.toList
-    
-    match matches with
-    | [] ->
-        yield E ^ "found no assembly"
-        return Error()
+                Sources.save
+                    sourcesPath
+                    { sources with
+                        Sources = Set.add assemblySource sources.Sources }
 
-    | [source] ->
-        yield I ^ sprintf "removing source:"
-        do! printProperties 1 [source.Format]
+                return Ok()
+        }
 
-        let newSources = 
-            { sources with
-                Sources = sources.Sources |> Set.remove source }
+let removeAssembly (assemblyPath: AssemblySource rpath) =
+    withSources
+    ^ fun sources ->
+        output {
 
-        let sourcesPath = Directory.current() |> Path.extend Sources.path
-        newSources |> Sources.save sourcesPath
+            let matches =
+                sources.Sources
+                |> Seq.choose
+                   ^ function
+                       | AssemblySource path ->
+                           let pathsToCompare = RPath.parts path |> List.subs |> List.map RPath.ofParts
 
-        return Ok()
+                           if pathsToCompare |> List.contains assemblyPath then
+                               Some ^ AssemblySource path
+                           else
+                               None
+                |> Seq.toList
 
-    | moreThanOne ->
-        yield E ^ "found more than one source that matches the relative path of the assembly:"
-        for path in moreThanOne do
-            yield E ^ indent ^ string path
-        return Error()
-}
+            match matches with
+            | [] ->
+                yield E ^ "found no assembly"
+                return Error()
 
-let extract() = withSourcesAndGroup ^ fun sources group -> output {
+            | [ source ] ->
+                yield I ^ sprintf "removing source:"
+                do! printProperties 1 [ source.Format ]
 
-    match! runCommands When.BeforeExtract with
-    | Error() -> return Error()
-    | Ok() ->
+                let newSources =
+                    { sources with
+                        Sources = sources.Sources |> Set.remove source }
 
-    let newStrings, errors = 
-        sources 
-        |> Sources.extractOriginalStrings (Directory.current()) 
+                let sourcesPath = Directory.current () |> Path.extend Sources.path
+                newSources |> Sources.save sourcesPath
 
-    let updated = 
-        TranslationGroup.translations group
-        |> List.choose ^ Translation.update newStrings
+                return Ok()
 
-    do! commitTranslations "updated" updated
+            | moreThanOne ->
+                yield E ^ "found more than one source that matches the relative path of the assembly:"
 
-    if errors <> [] then
-        yield W ^ ".t() extractions failed:"
-        do! printProperties 1 ^ StringExtractor.ExtractionErrors.format errors
+                for path in moreThanOne do
+                    yield E ^ indent ^ string path
 
-    return Ok()
-}
+                return Error()
+        }
 
-let gc() = withGroup ^ fun group -> output {
+let extract () =
+    withSourcesAndGroup
+    ^ fun sources group ->
+        output {
 
-    let collected = 
-        group 
-        |> TranslationGroup.translations
-        |> List.choose Translation.gc
+            match! runCommands When.BeforeExtract with
+            | Error() -> return Error()
+            | Ok() ->
 
-    do! commitTranslations "garbage collected" collected
-    return Ok()
-}
+                let newStrings, errors =
+                    sources |> Sources.extractOriginalStrings (Directory.current ())
 
-let projectName() = 
-    Directory.current() 
-    |> Path.name 
-    |> ProjectName
+                let updated =
+                    TranslationGroup.translations group
+                    |> List.choose ^ Translation.update newStrings
+
+                do! commitTranslations "updated" updated
+
+                if errors <> [] then
+                    yield W ^ ".t() extractions failed:"
+                    do! printProperties 1 ^ StringExtractor.ExtractionErrors.format errors
+
+                return Ok()
+        }
+
+let gc () =
+    withGroup
+    ^ fun group ->
+        output {
+
+            let collected = group |> TranslationGroup.translations |> List.choose Translation.gc
+
+            do! commitTranslations "garbage collected" collected
+            return Ok()
+        }
+
+let projectName () =
+    Directory.current () |> Path.name |> ProjectName
 
 let private selectTranslations (languages: LanguageTag selector) (translations: Translation seq) : Translation seq =
     translations
-    |> Seq.filter ^ fun translation -> 
-        Selector.isSelected translation.Language languages
-        || Selector.isSelected translation.Language.Primary languages
+    |> Seq.filter
+       ^ fun translation ->
+           Selector.isSelected translation.Language languages
+           || Selector.isSelected translation.Language.Primary languages
 
-let private exportWith
-    (languages: LanguageTag selector)
-    (exportDirectory: Export arpath)
-    (exporter: Exporter) =
-    withSourcesAndGroup ^ fun sources group -> output {
+let private exportWith (languages: LanguageTag selector) (exportDirectory: Export arpath) (exporter: Exporter) =
+    withSourcesAndGroup
+    ^ fun sources group ->
+        output {
 
-    let project = projectName()
+            let project = projectName ()
 
-    let exports = 
-        group
-        |> TranslationGroup.translations
-        |> selectTranslations languages
-        |> Seq.map ^ fun translation ->
-            let filename = exporter.DefaultFilename project translation.Language 
-            let path = exportDirectory |> ARPath.extend ^ ARPath.parse ^ string filename
-            let file = ImportExport.export project sources.Language translation
-            path, file
-        |> Seq.toList
-    
-    let rooted = ARPath.at ^ Directory.current()
+            let exports =
+                group
+                |> TranslationGroup.translations
+                |> selectTranslations languages
+                |> Seq.map
+                   ^ fun translation ->
+                       let filename = exporter.DefaultFilename project translation.Language
+                       let path = exportDirectory |> ARPath.extend ^ ARPath.parse ^ string filename
+                       let file = ImportExport.export project sources.Language translation
+                       path, file
+                |> Seq.toList
 
-    let existingOnes = 
-        exports
-        |> Seq.map fst
-        |> Seq.filter ^ fun path -> File.exists (rooted path)
-        |> Seq.toList
+            let rooted = ARPath.at ^ Directory.current ()
 
-    if existingOnes <> [] then
-        yield E ^ sprintf "One or more exported files already exists, please remove them:"
-        for existingFile in existingOnes do
-            yield E ^ indent ^ string existingFile
-        return Error()
-    else
+            let existingOnes =
+                exports
+                |> Seq.map fst
+                |> Seq.filter ^ fun path -> File.exists (rooted path)
+                |> Seq.toList
 
-    for (file, content) in exports do
-        yield I ^ sprintf "Exporting translation to '%s'" (string file)
-        content |> exporter.SaveToPath (rooted file)
+            if existingOnes <> [] then
+                yield E ^ sprintf "One or more exported files already exists, please remove them:"
 
-    return Ok()
-}
+                for existingFile in existingOnes do
+                    yield E ^ indent ^ string existingFile
 
-let export 
-    (languages: LanguageTag selector)
-    (exportDirectory: Export arpath) 
-    (format: ExportFormat) =
+                return Error()
+            else
 
-    let exportWith exporter = exportWith languages exportDirectory exporter
+                for (file, content) in exports do
+                    yield I ^ sprintf "Exporting translation to '%s'" (string file)
+                    content |> exporter.SaveToPath(rooted file)
+
+                return Ok()
+        }
+
+let export (languages: LanguageTag selector) (exportDirectory: Export arpath) (format: ExportFormat) =
+
+    let exportWith exporter =
+        exportWith languages exportDirectory exporter
 
     match format with
-    | XLIFF format -> 
-        exportWith ^ XLIFF.exporter format
-    | Excel -> 
-        exportWith Excel.Exporter
+    | XLIFF format -> exportWith ^ XLIFF.exporter format
+    | Excel -> exportWith Excel.Exporter
 
-let import (files: (Exporter * Path) list) = withGroup ^ fun group -> output {
+let import (files: (Exporter * Path) list) =
+    withGroup
+    ^ fun group ->
+        output {
 
-    let project = projectName()
-    let files = 
-        files
-        |> List.collect ^ fun (exporter, path) ->
-            exporter.LoadFromPath path
-        
+            let project = projectName ()
 
-    let translations, warnings = 
-        let translations = TranslationGroup.translations group
-        files 
-        |> ImportExport.import project translations
+            let files =
+                files |> List.collect ^ fun (exporter, path) -> exporter.LoadFromPath path
 
-    if warnings <> [] then
-        yield I ^ "Import warnings:"
-        for warning in warnings do
-            yield W ^ indent ^ string warning
 
-    do! commitTranslations "changed by import" translations
-    return Ok()
-}
+            let translations, warnings =
+                let translations = TranslationGroup.translations group
+                files |> ImportExport.import project translations
 
-let translate (languages: LanguageTag selector) = 
-    withSourcesAndGroup ^ fun sources group -> output {
+            if warnings <> [] then
+                yield I ^ "Import warnings:"
 
-    let toTranslate = 
-        group
-        |> TranslationGroup.translations
-        |> selectTranslations languages
-        |> Seq.toList
+                for warning in warnings do
+                    yield W ^ indent ^ string warning
 
-    // The API may fail at any time, but if it does, continuing does not make sense, but the
-    // translations done before should also not get lost, so we translate and commit the results one
-    // by one.
-    for translation in toTranslate do
-        let result, error = 
-            Translate.newStrings Google.Translator sources.Language translation
-        yield I ^ (string result)
+            do! commitTranslations "changed by import" translations
+            return Ok()
+        }
 
-        match result with
-        | Translated(_, translation) ->
-            do! commitTranslations "translated" [translation]
-        | _ -> ()
+let translate (languages: LanguageTag selector) =
+    withSourcesAndGroup
+    ^ fun sources group ->
+        output {
 
-        match error with
-        | Some error ->
-            yield W ^ "You may need to retry to translate all strings:"
-            yield W ^ indent ^ string error.Message
-        | None -> ()
+            let toTranslate =
+                group
+                |> TranslationGroup.translations
+                |> selectTranslations languages
+                |> Seq.toList
 
-    return Ok()
-}
+            // The API may fail at any time, but if it does, continuing does not make sense, but the
+            // translations done before should also not get lost, so we translate and commit the results one
+            // by one.
+            for translation in toTranslate do
+                let result, error =
+                    Translate.newStrings Google.Translator sources.Language translation
 
-let sync() = output {
-    do! syncAllContent()
-    return Ok()
-}
+                yield I ^ (string result)
+
+                match result with
+                | Translated(_, translation) -> do! commitTranslations "translated" [ translation ]
+                | _ -> ()
+
+                match error with
+                | Some error ->
+                    yield W ^ "You may need to retry to translate all strings:"
+                    yield W ^ indent ^ string error.Message
+                | None -> ()
+
+            return Ok()
+        }
+
+let sync () =
+    output {
+        do! syncAllContent ()
+        return Ok()
+    }
 
 [<AutoOpen>]
 module internal ShowHelper =
 
-    let showOriginalStringsWithContext languages context recordFilter = 
-        withGroup ^ fun group -> output {
+    let showOriginalStringsWithContext languages context recordFilter =
+        withGroup
+        ^ fun group ->
+            output {
 
-        let filteredOriginalStrings = 
-            group
-            |> TranslationGroup.translations
-            |> selectTranslations languages
-            |> Seq.collect ^ fun t -> t.Records
-            |> Seq.filter recordFilter
-            |> Seq.map ^ fun r -> r.Original, r.Contexts
-            |> OriginalStrings.create
+                let filteredOriginalStrings =
+                    group
+                    |> TranslationGroup.translations
+                    |> selectTranslations languages
+                    |> Seq.collect ^ fun t -> t.Records
+                    |> Seq.filter recordFilter
+                    |> Seq.map ^ fun r -> r.Original, r.Contexts
+                    |> OriginalStrings.create
 
-        match OriginalStrings.strings filteredOriginalStrings with
-        | [] ->
-            yield I ^ sprintf "No %s" context
-            return Ok()
-        | strings ->
-            yield I ^ sprintf "%d %s:" strings.Length context
-            do! printIndentedStrings 1 ^ OriginalStrings.format filteredOriginalStrings
-            return Ok()
-    }
+                match OriginalStrings.strings filteredOriginalStrings with
+                | [] ->
+                    yield I ^ sprintf "No %s" context
+                    return Ok()
+                | strings ->
+                    yield I ^ sprintf "%d %s:" strings.Length context
+                    do! printIndentedStrings 1 ^ OriginalStrings.format filteredOriginalStrings
+                    return Ok()
+            }
 
-    let showNew languages = 
+    let showNew languages =
         showOriginalStringsWithContext languages "new strings"
-            ^ fun r -> 
-                r.Translated 
-                |> function TranslatedString.New -> true | _ -> false
+        ^ fun r ->
+            r.Translated
+            |> function
+                | TranslatedString.New -> true
+                | _ -> false
 
-    let showUnused languages = 
+    let showUnused languages =
         showOriginalStringsWithContext languages "unused strings"
-            ^ fun r ->
-                r.Translated
-                |> function TranslatedString.Unused _ -> true | _ -> false
+        ^ fun r ->
+            r.Translated
+            |> function
+                | TranslatedString.Unused _ -> true
+                | _ -> false
 
-    let showShared languages = 
+    let showShared languages =
         showOriginalStringsWithContext languages "shared strings"
-            ^ fun r -> 
-                match r.Contexts with
-                | [] | [_] -> false
-                | _ -> true
+        ^ fun r ->
+            match r.Contexts with
+            | []
+            | [ _ ] -> false
+            | _ -> true
 
-    let showWarnings languages = withGroup ^ fun group -> output {
-        
-        let translationsWithWarnings = 
-            group
-            |> TranslationGroup.translations
-            |> selectTranslations languages
-            |> Seq.map ^ fun translation ->
-                translation.Language,
-                translation.Records
-                |> List.choose ^ fun record -> 
-                    match Verification.verifyRecord record with
-                    | [] -> None
-                    | warnings -> Some (record, warnings)
-            |> Seq.toList
+    let showWarnings languages =
+        withGroup
+        ^ fun group ->
+            output {
 
-        match translationsWithWarnings with
-        | [] -> 
-            yield I ^ "No warnings"
-        | translations ->
-            for language, records in translations do
-                yield I ^ sprintf "%s warnings:" language.Formatted
-                for record, warnings in records do
-                    let warningProperties = 
-                        warnings 
-                        |> List.map ^ fun warning ->
-                            Format.group (string warning) []
-                    do! printProperties 1 (warningProperties)
-                    do! printProperties 2 (TranslationRecord.format record)
+                let translationsWithWarnings =
+                    group
+                    |> TranslationGroup.translations
+                    |> selectTranslations languages
+                    |> Seq.map
+                       ^ fun translation ->
+                           translation.Language,
+                           translation.Records
+                           |> List.choose
+                              ^ fun record ->
+                                  match Verification.verifyRecord record with
+                                  | [] -> None
+                                  | warnings -> Some(record, warnings)
+                    |> Seq.toList
+
+                match translationsWithWarnings with
+                | [] -> yield I ^ "No warnings"
+                | translations ->
+                    for language, records in translations do
+                        yield I ^ sprintf "%s warnings:" language.Formatted
+
+                        for record, warnings in records do
+                            let warningProperties =
+                                warnings |> List.map ^ fun warning -> Format.group (string warning) []
+
+                            do! printProperties 1 (warningProperties)
+                            do! printProperties 2 (TranslationRecord.format record)
+
+                return Ok()
+            }
+
+let show (languages: LanguageTag selector) (details: string list) =
+    output {
+
+        for detail in details do
+            match detail with
+            | "languages" ->
+                yield I ^ "Supported languages:"
+
+                for { Tag = tag; EnglishName = name } in SystemCultures.All do
+                    yield I ^ indent ^ sprintf "%s %s" tag.Formatted name.Formatted
+            | "unused" -> do! showUnused languages |> Output.ignore
+            | "shared" -> do! showShared languages |> Output.ignore
+            | "new" -> do! showNew languages |> Output.ignore
+            | "warnings" -> do! showWarnings languages |> Output.ignore
+
+            | unsupported -> yield E ^ sprintf "unsupported category: %s" unsupported
 
         return Ok()
     }
 
-let show (languages: LanguageTag selector) (details: string list) = output {
+let addCommand (when': string) (command: string) =
+    output {
+        match When.tryFromString when' with
+        | None ->
+            E ^ sprintf "unsupported trigger '%s'" when'
+            return Error()
+        | Some w ->
+            let command = command.Trim()
 
-    for detail in details do
-        match detail with
-        | "languages" -> 
-            yield I ^ "Supported languages:"
-            for { Tag = tag; EnglishName = name } in SystemCultures.All do
-                yield I ^ indent ^ sprintf "%s %s" tag.Formatted name.Formatted
-        | "unused" ->
-            do! showUnused languages |> Output.ignore
-        | "shared" ->
-            do! showShared languages |> Output.ignore
-        | "new" ->
-            do! showNew languages |> Output.ignore
-        | "warnings" ->
-            do! showWarnings languages |> Output.ignore
+            if command = "" then
+                E ^ sprintf "command can not be empty"
+                return Error()
+            else
+                let command = Command(w, command)
+                let path = Directory.current ()
+                Commands.load path |> List.append [ command ] |> Commands.save path
+                return Ok()
+    }
 
-        | unsupported -> 
-            yield E ^ sprintf "unsupported category: %s" unsupported
-        
-    return Ok()
-}
+let removeCommands (when': string) =
+    output {
+        match When.tryFromString when' with
+        | None ->
+            E ^ sprintf "unsupported trigger '%s'" when'
+            return Error()
+        | Some w ->
+            let root = Directory.current ()
+            let oldCommands = Commands.load root
 
-let addCommand (when': string) (command: string) = output {
-    match When.tryFromString when' with
-    | None -> 
-        E ^ sprintf "unsupported trigger '%s'" when'
-        return Error()
-    | Some w ->
-    let command = command.Trim();
-    if command = "" then 
-        E ^ sprintf "command can not be empty"
-        return Error()
-    else
-    let command = Command(w, command)
-    let path = Directory.current()
-    Commands.load path
-    |> List.append [command]
-    |> Commands.save path
-    return Ok()
-}
+            let newCommands =
+                oldCommands
+                |> List.choose ^ fun (Command(w', _) as c) -> if w' <> w then Some c else None
 
-let removeCommands (when': string) = output {
-    match When.tryFromString when' with
-    | None -> 
-        E ^ sprintf "unsupported trigger '%s'" when'
-        return Error()
-    | Some w ->
-    let root = Directory.current()
-    let oldCommands = Commands.load root
-    let newCommands = 
-        oldCommands
-        |> List.choose ^ fun (Command(w', _) as c) -> if w' <> w then Some c else None
-    let removed = oldCommands.Length - newCommands.Length
-    if removed = 0 then 
-        W ^ sprintf "No match, no command was removed" 
+            let removed = oldCommands.Length - newCommands.Length
+
+            if removed = 0 then
+                W ^ sprintf "No match, no command was removed"
+                return Ok()
+            else
+                newCommands |> Commands.save root
+                I ^ sprintf "Removed %d command(s)" removed
+                return Ok()
+    }
+
+let listCommands () =
+    output {
+        let root = Directory.current ()
+        let commands = Commands.load root
+
+        if commands = [] then
+            return Ok()
+        else
+            let whenGroups = commands |> Seq.groupBy ^ fun (Command(w, _)) -> w
+
+            for wg in whenGroups do
+                let (w, commands) = wg
+                I ^ sprintf "%s:" (string w)
+
+                for Command(_, cmd) in commands do
+                    I ^ sprintf "> %s" cmd
+
+            return Ok()
+    }
+
+let editCommands () =
+    output {
+        let root = Directory.current ()
+        let filename = Commands.filename root
+        let root = Directory.current ()
+
+        if not ^ Commands.exists root then
+            Commands.save root []
+
+        ExternalCommand.openFile filename
         return Ok()
-    else 
-    newCommands
-    |> Commands.save root    
-    I ^ sprintf "Removed %d command(s)" removed
-    return Ok()
-}
+    }
 
-let listCommands() = output {
-    let root = Directory.current()
-    let commands = Commands.load root
-    if commands = [] then
-        return Ok()
-    else
-    let whenGroups = 
-        commands
-        |> Seq.groupBy ^ fun (Command(w, _)) -> w
-
-    for wg in whenGroups do
-        let (w, commands) = wg
-        I ^ sprintf "%s:" (string w)
-        for Command(_, cmd) in commands do
-            I ^ sprintf "> %s" cmd
-
-    return Ok()
-}
-
-let editCommands() = output {
-    let root = Directory.current()
-    let filename = Commands.filename root
-    let root = Directory.current()
-    if not ^ Commands.exists root then
-        Commands.save root []
-    ExternalCommand.openFile filename
-    return Ok()
-}
-
-[<assembly:InternalsVisibleTo("TNT.Tests")>]
+[<assembly: InternalsVisibleTo("TNT.Tests")>]
 do ()

@@ -12,11 +12,11 @@ namespace TNT
         static string[] ResolveAvailableLanguages()
         {
             var contentPath = Path.Combine(TranslationLoader.GetEntryAssemblyDirectory(), ".tnt-content");
+
             return
                 Directory.EnumerateFiles(contentPath, "*.tnt")
-                    .Select(Path.GetFileNameWithoutExtension)
-                    .ToArray();
+                   .Select(Path.GetFileNameWithoutExtension)
+                   .ToArray();
         }
     }
 }
-

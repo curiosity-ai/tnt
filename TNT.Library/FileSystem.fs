@@ -8,20 +8,17 @@ open FunToolbox.FileSystem
 open TNT.Model
 open TNT.Library
 
-module Sources = 
+module Sources =
 
     let DefaultLanguage = LanguageTag("en-US")
-    let SourcesFilename : Sources filename = Filename "sources.json"
-    
+    let SourcesFilename: Sources filename = Filename "sources.json"
+
     /// Relative path to the source file.
-    let path : Sources rpath = 
-        TNT.Subdirectory
-        |> RPath.extend (SourcesFilename |> Filename.toPath)
+    let path: Sources rpath =
+        TNT.Subdirectory |> RPath.extend (SourcesFilename |> Filename.toPath)
 
     let load (path: Path) : Sources =
-        path
-        |> File.loadText Encoding.UTF8
-        |> Sources.deserialize
+        path |> File.loadText Encoding.UTF8 |> Sources.deserialize
 
     let save (path: Path) (sources: Sources) : unit =
         sources
@@ -29,34 +26,23 @@ module Sources =
         |> fun content -> File.saveText Encoding.UTF8 content path
 
     /// Extract all original strings from all sources.
-    let extractOriginalStrings (baseDirectory: Path) (sources: Sources) 
-        : OriginalStrings * StringExtractor.ExtractionErrors = 
-        let stringsFromSource (source: Source) : OriginalStrings * StringExtractor.ExtractionErrors = 
+    let extractOriginalStrings (baseDirectory: Path) (sources: Sources) : OriginalStrings * StringExtractor.ExtractionErrors =
+        let stringsFromSource (source: Source) : OriginalStrings * StringExtractor.ExtractionErrors =
             match source with
-            | AssemblySource path -> 
+            | AssemblySource path ->
                 let fullPath = baseDirectory |> Path.extend path
                 StringExtractor.extract fullPath
-        
-        let stringsAndErrors = 
-            sources.Sources 
-            |> Seq.map stringsFromSource
-            |> Seq.toList
-        
-        stringsAndErrors
-        |> List.map fst
-        |> OriginalStrings.merge
-        ,
-        stringsAndErrors
-        |> List.collect snd
 
-            
-module Translation = 
-    
+        let stringsAndErrors = sources.Sources |> Seq.map stringsFromSource |> Seq.toList
+
+        stringsAndErrors |> List.map fst |> OriginalStrings.merge, stringsAndErrors |> List.collect snd
+
+
+module Translation =
+
     /// Load the translation at the given path.
     let load (path: Path) : Translation =
-        path
-        |> File.loadText Encoding.UTF8
-        |> Translation.deserialize
+        path |> File.loadText Encoding.UTF8 |> Translation.deserialize
 
     /// Save a translation to the given path, overwrites if a file exists there.
     let save (path: Path) (translation: Translation) =
@@ -64,81 +50,80 @@ module Translation =
         |> Translation.serialize
         |> fun str -> File.saveText Encoding.UTF8 str path
 
-module Translations = 
+module Translations =
 
     /// Get all translation filenames in the given directory. Note: the directory does not contain
     /// the subdirectory ".tnt"
-    let scan (baseDirectory: Path) : Translation filename list = 
+    let scan (baseDirectory: Path) : Translation filename list =
         let directory = baseDirectory |> Path.extend TNT.Subdirectory
-        if not ^ Directory.exists directory then [] else
-        Directory.EnumerateFiles (string directory, string Translation.FilenamePattern)
-        |> Seq.map (Path.parse >> Path.name >> Filename)
-        |> Seq.toList
+
+        if not ^ Directory.exists directory then
+            []
+        else
+            Directory.EnumerateFiles(string directory, string Translation.FilenamePattern)
+            |> Seq.map (Path.parse >> Path.name >> Filename)
+            |> Seq.toList
 
     /// Load all the translations in the given directory.
-    let loadAll (directory: Path) : Translation list = 
+    let loadAll (directory: Path) : Translation list =
 
         // Note that we can't support filenames to diverge from the translation id's
         // to maintain the export / import integrity.
-        let checkFilename filename translation = 
+        let checkFilename filename translation =
             let expected = string ^ Translation.filename translation
+
             if filename <> expected then
                 failwithf "can't load translation with filename '%s', it must be '%s', did you rename it?" filename expected
 
         scan directory
-        |> Seq.map ^ fun fn -> 
-            directory
-            |> Path.extend TNT.Subdirectory
-            |> Path.extendF fn
-        |> Seq.map ^ fun path ->
-            let translation = Translation.load path
-            checkFilename (Path.name path) translation
-            translation
+        |> Seq.map ^ fun fn -> directory |> Path.extend TNT.Subdirectory |> Path.extendF fn
+        |> Seq.map
+           ^ fun path ->
+               let translation = Translation.load path
+               checkFilename (Path.name path) translation
+               translation
         |> Seq.toList
 
-module TranslationContent = 
-    
+module TranslationContent =
+
     let save (path: Path) (content: TranslationContent) =
-        content 
-        |> TranslationContent.serialize    
+        content
+        |> TranslationContent.serialize
         |> fun content -> File.saveText Encoding.UTF8 content path
 
-module TranslationContents = 
-    
-    let scan (baseDirectory: Path) : TranslationContent filename list = 
-        let directory = baseDirectory |> Path.extend TNT.ContentSubdirectory
-        if not ^ Directory.exists directory then [] else
-        Directory.EnumerateFiles (string directory, string TranslationContent.FilenamePattern)
-        |> Seq.map (Path.parse >> Path.name >> Filename)
-        |> Seq.toList
+module TranslationContents =
 
-module TranslationGroup = 
-    
-    let load (directory: Path) = 
-        Translations.loadAll directory
-        |> TranslationGroup.fromTranslations
-    
+    let scan (baseDirectory: Path) : TranslationContent filename list =
+        let directory = baseDirectory |> Path.extend TNT.ContentSubdirectory
+
+        if not ^ Directory.exists directory then
+            []
+        else
+            Directory.EnumerateFiles(string directory, string TranslationContent.FilenamePattern)
+            |> Seq.map (Path.parse >> Path.name >> Filename)
+            |> Seq.toList
+
+module TranslationGroup =
+
+    let load (directory: Path) =
+        Translations.loadAll directory |> TranslationGroup.fromTranslations
+
 module Commands =
 
     open TNT.Library.Commands
 
     let filename (root: Path) =
-        root
-        |> Path.extend TNT.Subdirectory
-        |> Path.extend ^ RPath "commands.json"
+        root |> Path.extend TNT.Subdirectory |> Path.extend ^ RPath "commands.json"
 
     let exists (root: Path) : bool =
         let fn = root |> filename
         File.exists fn
 
     let load (root: Path) : Command list =
-        if not ^ exists root then [] else
-        root
-        |> filename
-        |> File.loadText Encoding.UTF8
-        |> Commands.deserialize
+        if not ^ exists root then
+            []
+        else
+            root |> filename |> File.loadText Encoding.UTF8 |> Commands.deserialize
 
     let save (root: Path) (commands: Command list) =
-        root
-        |> filename
-        |> File.saveText Encoding.UTF8 (Commands.serialize commands)
+        root |> filename |> File.saveText Encoding.UTF8 (Commands.serialize commands)

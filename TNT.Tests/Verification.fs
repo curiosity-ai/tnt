@@ -13,11 +13,8 @@ open Xunit
 [<InlineData("{0:MM/dd/yy H:mm:ss zzz}", "{0:MM/dd/yy H:mm:ss zzz}")>]
 [<InlineData("{{}}", "")>]
 [<InlineData("before {0} after {2} end", "{0},{2}")>]
-let ``detect and extract common placeholders``(str: string, phs: string) = 
-    str
-    |> placeholders
-    |> String.concat ","
-    |> should equal phs
+let ``detect and extract common placeholders`` (str: string, phs: string) =
+    str |> placeholders |> String.concat "," |> should equal phs
 
 
 [<Theory>]
@@ -25,7 +22,7 @@ let ``detect and extract common placeholders``(str: string, phs: string) =
 [<InlineData("\r", "\r")>]
 [<InlineData("\rx", "\r")>]
 [<InlineData("\r  \tx ", "\r  \t")>]
-let ``get whitespace left``(str: string, ws: string) = 
+let ``get whitespace left`` (str: string, ws: string) =
     str |> whitespaceLeft |> should equal ws
 
 [<Theory>]
@@ -33,5 +30,5 @@ let ``get whitespace left``(str: string, ws: string) =
 [<InlineData("\r", "\r")>]
 [<InlineData("x\r", "\r")>]
 [<InlineData(" x\r  \t", "\r  \t")>]
-let ``get whitespace right``(str: string, ws: string) = 
+let ``get whitespace right`` (str: string, ws: string) =
     str |> whitespaceRight |> should equal ws

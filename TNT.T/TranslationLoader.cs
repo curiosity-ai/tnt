@@ -20,13 +20,14 @@ namespace TNT
         public static Dictionary<string, string> LoadTranslation(IEnumerable<string> languageTags)
         {
             var baseDirectory = GetEntryAssemblyDirectory();
+
             var translations =
                 languageTags
-                    .Select(language => Path.Combine(baseDirectory, ".tnt-content/" + language + ".tnt"))
-                    .Where(File.Exists)
-                    .Select(path => File.ReadAllText(path, Encoding.UTF8))
-                    .Select(JsonValue.Parse)
-                    .SelectMany(GetTranslationPairs);
+                   .Select(language => Path.Combine(baseDirectory, ".tnt-content/" + language + ".tnt"))
+                   .Where(File.Exists)
+                   .Select(path => File.ReadAllText(path, Encoding.UTF8))
+                   .Select(JsonValue.Parse)
+                   .SelectMany(GetTranslationPairs);
 
             var table = new Dictionary<string, string>();
 
@@ -46,8 +47,8 @@ namespace TNT
         public static string GetEntryAssemblyDirectory()
         {
             var codeBase = Assembly.GetEntryAssembly().CodeBase;
-            var uri = new UriBuilder(codeBase);
-            var path = Uri.UnescapeDataString(uri.Path);
+            var uri      = new UriBuilder(codeBase);
+            var path     = Uri.UnescapeDataString(uri.Path);
             return Path.GetDirectoryName(path);
         }
 
@@ -58,6 +59,7 @@ namespace TNT
             if (ci.Name == "")
                 yield break;
             yield return ci.Name;
+
             if (ci.Parent != null)
                 foreach (var l in GetLanguagesToLookFor(ci.Parent))
                     yield return l;
@@ -65,10 +67,9 @@ namespace TNT
 
         static (string, string)[] GetTranslationPairs(JsonValue value)
         {
-            return ((JsonArray) value)
-                .Select(pair => ((string) pair[0], (string) pair[1]))
-                .ToArray();
+            return ((JsonArray)value)
+               .Select(pair => ((string)pair[0], (string)pair[1]))
+               .ToArray();
         }
     }
 }
-

@@ -42,15 +42,15 @@ namespace TNT
 
                 // no merging of languages supported for now.
                 SpecificTranslations.Add(
-                    languageTag, 
-                    TranslationLoader.LoadTranslation(new[] {languageTag}));
+                    languageTag,
+                    TranslationLoader.LoadTranslation(new[] { languageTag }));
 
                 return t(original, languageTag);
             }
         }
 
         static readonly object Section = new object();
-        static readonly Dictionary<string, Dictionary<string, string>> SpecificTranslations = 
+        static readonly Dictionary<string, Dictionary<string, string>> SpecificTranslations =
             new Dictionary<string, Dictionary<string, string>>();
     }
 }

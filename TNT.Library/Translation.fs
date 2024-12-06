@@ -9,102 +9,100 @@ open Chiron
 [<AutoOpen>]
 module internal Helper =
 
-    let formatString (str: string) =
-        str |> String |> Json.format
+    let formatString (str: string) = str |> String |> Json.format
 
-module Seq = 
+module Seq =
     let setify seq = seq |> Seq.sort |> Seq.distinct
 
-module OriginalStrings = 
+module OriginalStrings =
 
-    let format (strings: OriginalStrings) = 
+    let format (strings: OriginalStrings) =
 
         let strings = strings |> OriginalStrings.strings
-        strings 
-        |> List.collect ^ fun (original, contexts) ->
-            [
-                yield Format.indented 0 ^ formatString original
-                for context in contexts ->
-                    Format.indented 1 (string context)
-            ]
 
-module TranslationRecord = 
+        strings
+        |> List.collect
+           ^ fun (original, contexts) ->
+               [ yield Format.indented 0 ^ formatString original
+                 for context in contexts -> Format.indented 1 (string context) ]
 
-    let createNew original contexts = { 
-        Original = original; 
-        Translated = TranslatedString.New 
-        Contexts = contexts
-        Notes = []
-    }
+module TranslationRecord =
 
-    let unuse (record: TranslationRecord) : TranslationRecord option = 
+    let createNew original contexts =
+        { Original = original
+          Translated = TranslatedString.New
+          Contexts = contexts
+          Notes = [] }
+
+    let unuse (record: TranslationRecord) : TranslationRecord option =
         match record.Translated with
-        | TranslatedString.New
-            -> None
-        | TranslatedString.NeedsReview str 
+        | TranslatedString.New -> None
+        | TranslatedString.NeedsReview str
         | TranslatedString.Final str
-        | TranslatedString.Unused str
-            -> Some ^ { record with Translated = TranslatedString.Unused str }
+        | TranslatedString.Unused str ->
+            Some
+            ^ { record with
+                  Translated = TranslatedString.Unused str }
 
     /// Update an existing translation record string.
-    let update 
-        (existing: TranslationRecord) 
-        (newContexts: LogicalContext list) : TranslationRecord = 
+    let update (existing: TranslationRecord) (newContexts: LogicalContext list) : TranslationRecord =
         match existing.Translated with
         | TranslatedString.New _
         | TranslatedString.NeedsReview _
-        | TranslatedString.Final _ -> 
-            { existing with Contexts = newContexts }
-        | TranslatedString.Unused str -> 
-            { existing with 
-                Translated = TranslatedString.NeedsReview str 
-                Contexts = newContexts
-            }
+        | TranslatedString.Final _ -> { existing with Contexts = newContexts }
+        | TranslatedString.Unused str ->
+            { existing with
+                Translated = TranslatedString.NeedsReview str
+                Contexts = newContexts }
 
-    let format (record: TranslationRecord) = [
-        yield Format.prop "state" record.Translated.State
-        yield Format.prop "original" (formatString record.Original)
-        yield Format.prop "translated" (formatString ^ string record.Translated)
-        for context in record.Contexts do
-            yield Format.prop "context" (string context)
-        for note in record.Notes do
-            yield Format.prop "note" note
-    ]
+    let format (record: TranslationRecord) =
+        [ yield Format.prop "state" record.Translated.State
+          yield Format.prop "original" (formatString record.Original)
+          yield Format.prop "translated" (formatString ^ string record.Translated)
+          for context in record.Contexts do
+              yield Format.prop "context" (string context)
+          for note in record.Notes do
+              yield Format.prop "note" note ]
 
 module TranslationCounters =
 
-    let zero = { New = 0; NeedsReview = 0; Warnings = 0; Final = 0; Unused = 0 }
-    
-    let combine (l: TranslationCounters) (r: TranslationCounters) = {
-        New = l.New + r.New
-        NeedsReview = l.NeedsReview + r.NeedsReview
-        Warnings = l.Warnings + r.Warnings
-        Final = l.Final + r.Final
-        Unused = l.Unused + r.Unused
-    }
+    let zero =
+        { New = 0
+          NeedsReview = 0
+          Warnings = 0
+          Final = 0
+          Unused = 0 }
 
-    let ofTranslation (translation: Translation) : TranslationCounters = 
-    
-        let ``new``, needsReview, final, unused, needsReviewWithWarning = 
+    let combine (l: TranslationCounters) (r: TranslationCounters) =
+        { New = l.New + r.New
+          NeedsReview = l.NeedsReview + r.NeedsReview
+          Warnings = l.Warnings + r.Warnings
+          Final = l.Final + r.Final
+          Unused = l.Unused + r.Unused }
+
+    let ofTranslation (translation: Translation) : TranslationCounters =
+
+        let ``new``, needsReview, final, unused, needsReviewWithWarning =
             { zero with New = 1 },
             { zero with NeedsReview = 1 },
             { zero with Final = 1 },
             { zero with Unused = 1 },
-            { zero with NeedsReview = 1; Warnings = 1 }
+            { zero with
+                NeedsReview = 1
+                Warnings = 1 }
 
         let statusOf (record: TranslationRecord) =
             match record.Translated with
             | TranslatedString.New -> ``new``
-            | TranslatedString.NeedsReview _ -> 
-                if Verification.verifyRecord record = []
-                then needsReview
-                else needsReviewWithWarning
+            | TranslatedString.NeedsReview _ ->
+                if Verification.verifyRecord record = [] then
+                    needsReview
+                else
+                    needsReviewWithWarning
             | TranslatedString.Final _ -> final
             | TranslatedString.Unused _ -> unused
 
-        translation.Records
-        |> Seq.map statusOf
-        |> Seq.fold combine zero
+        translation.Records |> Seq.map statusOf |> Seq.fold combine zero
 
 [<CR(ModuleSuffix)>]
 module Translation =
@@ -112,20 +110,24 @@ module Translation =
     [<AutoOpen>]
     module Serialization =
 
-        let str = function
+        let str =
+            function
             | String str -> str
             | unexpected -> failwithf "expected a string, seen: %A" unexpected
 
-        let array = function
+        let array =
+            function
             | Array json -> json
             | unexpected -> failwithf "expected an array, seen: %A" unexpected
 
-        let deserializeTranslationRecord (record: Json) = 
+        let deserializeTranslationRecord (record: Json) =
             match record with
             | Array arr when arr.Length >= 3 ->
                 let original = str arr.[1]
-                let translatedString = 
+
+                let translatedString =
                     let translated = str arr.[2]
+
                     match str arr.[0] with
                     | "new" -> TranslatedString.New
                     | "needs-review" -> TranslatedString.NeedsReview translated
@@ -133,209 +135,183 @@ module Translation =
                     | "unused" -> TranslatedString.Unused translated
                     | unknown -> failwithf "'%s': invalid translated string state" unknown
 
-                let contexts = 
-                    if arr.Length <= 3 then [] else
-                    match arr.[3] with
-                    | Array arr 
-                        -> arr |> List.map (str >> LogicalContext)
-                    | unexpected 
-                        -> failwithf "expected an array of strings at the fourth position inside a language record, seen: %A" unexpected
+                let contexts =
+                    if arr.Length <= 3 then
+                        []
+                    else
+                        match arr.[3] with
+                        | Array arr -> arr |> List.map (str >> LogicalContext)
+                        | unexpected -> failwithf "expected an array of strings at the fourth position inside a language record, seen: %A" unexpected
 
                 let notes =
-                    if arr.Length <= 4 then [] else
-                    match arr.[4] with
-                    | Array arr
-                        -> arr |> List.map str
-                    | unexpected
-                        -> failwithf "expected an array of strings at the fifth position inside a language record, seen: %A" unexpected
+                    if arr.Length <= 4 then
+                        []
+                    else
+                        match arr.[4] with
+                        | Array arr -> arr |> List.map str
+                        | unexpected -> failwithf "expected an array of strings at the fifth position inside a language record, seen: %A" unexpected
 
-                {
-                    Original = original
-                    Translated = translatedString
-                    Contexts = contexts
-                    Notes = notes
-                }
+                { Original = original
+                  Translated = translatedString
+                  Contexts = contexts
+                  Notes = notes }
 
-            | unexpected ->
-                failwithf 
-                    "expect a translation record to be an array of at least three things, the original, the state, and the translated string, seen: %A" 
-                    unexpected
+            | unexpected -> failwithf "expect a translation record to be an array of at least three things, the original, the state, and the translated string, seen: %A" unexpected
 
-        let stateString = function
+        let stateString =
+            function
             | TranslatedString.New -> "new"
             | TranslatedString.NeedsReview _ -> "needs-review"
             | TranslatedString.Final _ -> "final"
             | TranslatedString.Unused _ -> "unused"
 
-        let serializeRecord (record: TranslationRecord) : Json = Array [
-            yield Json.string ^ stateString record.Translated
-            yield Json.string record.Original
-            yield Json.string ^ string record.Translated
-            yield Json.array (record.Contexts |> Seq.map (string >> String))
-            if record.Notes <> [] then
-                yield Json.array (record.Notes |> Seq.map String)
-        ]
+        let serializeRecord (record: TranslationRecord) : Json =
+            Array
+                [ yield Json.string ^ stateString record.Translated
+                  yield Json.string record.Original
+                  yield Json.string ^ string record.Translated
+                  yield Json.array (record.Contexts |> Seq.map (string >> String))
+                  if record.Notes <> [] then
+                      yield Json.array (record.Notes |> Seq.map String) ]
 
 
     let deserialize (js: string) : Translation =
 
         let file = Json.parse js
 
-        let (language : string, records : Json) = 
-            file 
-            |> Json.destructure ^ json {
-                let! language = Json.read "language"
-                let! records = Json.read "records"
-                return (language, records)
-            }
+        let (language: string, records: Json) =
+            file
+            |> Json.destructure
+               ^ json {
+                   let! language = Json.read "language"
+                   let! records = Json.read "records"
+                   return (language, records)
+               }
 
-        let records = 
-            records
-            |> array
-            |> Seq.map deserializeTranslationRecord
-            |> Seq.toList
+        let records = records |> array |> Seq.map deserializeTranslationRecord |> Seq.toList
 
-        {
-            Language = LanguageTag(language)
-            Records = records
-        }
-    
-    let serialize (translation: Translation) : string = 
+        { Language = LanguageTag(language)
+          Records = records }
 
-        let json = Json.object [
-            "language", String ^ string translation.Language
-            "records",
-                translation.Records
-                |> Seq.map serializeRecord
-                |> Json.array
-        ]
+    let serialize (translation: Translation) : string =
 
-        json 
-        |> Json.formatWith JsonFormattingOptions.Pretty
+        let json =
+            Json.object
+                [ "language", String ^ string translation.Language
+                  "records", translation.Records |> Seq.map serializeRecord |> Json.array ]
 
-        
-    let createNew language originalStrings = {
-        Language = language
-        Records = 
-            originalStrings 
+        json |> Json.formatWith JsonFormattingOptions.Pretty
+
+
+    let createNew language originalStrings =
+        { Language = language
+          Records =
+            originalStrings
             |> OriginalStrings.strings
-            |> Seq.map ^ uncurry TranslationRecord.createNew 
-            |> Seq.toList
-    }
+            |> Seq.map ^ uncurry TranslationRecord.createNew
+            |> Seq.toList }
 
-    let shortStatus (translation: Translation) : string = 
+    let shortStatus (translation: Translation) : string =
         let counters = TranslationCounters.ofTranslation translation
-        sprintf "%s%s" 
-            (translation.Language.Formatted) 
-            (counters.Formatted) 
+        sprintf "%s%s" (translation.Language.Formatted) (counters.Formatted)
 
-    let status (translation: Translation) : string = 
-        Text.concat " " [
-            shortStatus translation 
-            SystemCultures.tryGetName (translation.Language) 
-                |> Option.map ^ fun cn -> cn.Formatted
-                |> Option.defaultValue ""
-            (sprintf "%O" 
-                (TNT.Subdirectory 
-                |> RPath.extendF (Translation.filename translation)))
-        ]
+    let status (translation: Translation) : string =
+        Text.concat
+            " "
+            [ shortStatus translation
+              SystemCultures.tryGetName (translation.Language)
+              |> Option.map ^ fun cn -> cn.Formatted
+              |> Option.defaultValue ""
+              (sprintf "%O" (TNT.Subdirectory |> RPath.extendF (Translation.filename translation))) ]
 
     /// Update the translation's original strings and return the translation if it changed.
-    let update (strings: OriginalStrings) (translation: Translation) : Translation option = 
+    let update (strings: OriginalStrings) (translation: Translation) : Translation option =
 
-        let recordMap = 
-            translation.Records 
-            |> Seq.map ^ fun r -> r.Original, r
-            |> Map.ofSeq
+        let recordMap = translation.Records |> Seq.map ^ fun r -> r.Original, r |> Map.ofSeq
 
         let records, unusedMap =
             (recordMap, OriginalStrings.strings strings)
-            ||> List.mapFold ^ fun recordMap (string, contexts) ->
-                match recordMap.TryFind string with
-                | Some existing 
-                    -> TranslationRecord.update existing contexts, recordMap |> Map.remove string
-                | None 
-                    -> TranslationRecord.createNew string contexts, recordMap
+            ||> List.mapFold
+                ^ fun recordMap (string, contexts) ->
+                    match recordMap.TryFind string with
+                    | Some existing -> TranslationRecord.update existing contexts, recordMap |> Map.remove string
+                    | None -> TranslationRecord.createNew string contexts, recordMap
 
-        let recordsAfter = 
-            unusedMap 
-            |> Map.toSeq 
+        let recordsAfter =
+            unusedMap
+            |> Map.toSeq
             |> Seq.choose (snd >> TranslationRecord.unuse)
             |> Seq.append records
             |> Seq.sortBy ^ fun r -> r.Original
             |> Seq.toList
 
-        let recordsBefore = 
-            recordMap
-            |> Map.toSeq
-            |> Seq.map snd
-            |> Seq.toList
+        let recordsBefore = recordMap |> Map.toSeq |> Seq.map snd |> Seq.toList
 
-        if recordsAfter = recordsBefore 
-        then None
-        else Some { translation with Records = recordsAfter }
+        if recordsAfter = recordsBefore then
+            None
+        else
+            Some
+                { translation with
+                    Records = recordsAfter }
 
     /// Remove all unused entries from the translation and return the translation if
     /// it changed.
     let gc (translation: Translation) : Translation option =
 
-        let records, changed = 
+        let records, changed =
             translation.Records
-            |> List.partition ^ fun r -> 
-                match r.Translated with
-                | TranslatedString.Unused _ -> false
-                | _ -> true 
+            |> List.partition
+               ^ fun r ->
+                   match r.Translated with
+                   | TranslatedString.Unused _ -> false
+                   | _ -> true
             |> fun (r, u) -> r, u <> []
 
         changed
         |> Option.ofBool
         |> Option.map ^ fun () -> { translation with Records = records }
 
-module TranslationGroup = 
-    
-    let map f (TranslationGroup value) =
-        TranslationGroup(f value)
+module TranslationGroup =
 
-    type TranslationGroupError = 
-        | TranslationsWithTheSameLanguage of (LanguageTag * Translation list) list
+    let map f (TranslationGroup value) = TranslationGroup(f value)
+
+    type TranslationGroupError = TranslationsWithTheSameLanguage of (LanguageTag * Translation list) list
 
     /// Groups a list of translations, checks for duplicates and inconsistent relations
     /// between assembly paths and names.
-    let fromTranslations (translations: Translation list) 
-        : Result<TranslationGroup, TranslationGroupError> =
+    let fromTranslations (translations: Translation list) : Result<TranslationGroup, TranslationGroupError> =
 
         // check for duplicated languages
 
-        let byLanguage =
-            translations
-            |> List.groupBy ^ fun t -> t.Language
+        let byLanguage = translations |> List.groupBy ^ fun t -> t.Language
 
         let duplicatedList =
             byLanguage
-            |> Seq.filter (snd >> function _::_::_ -> true | _ -> false)
+            |> Seq.filter (
+                snd
+                >> function
+                    | _ :: _ :: _ -> true
+                    | _ -> false
+            )
             |> Seq.toList
 
-        if duplicatedList <> [] 
-        then Result.Error ^ TranslationsWithTheSameLanguage duplicatedList
+        if duplicatedList <> [] then
+            Result.Error ^ TranslationsWithTheSameLanguage duplicatedList
         else
 
-        byLanguage 
-        |> Seq.map ^ Snd.map List.exactlyOne
-        |> Map.ofSeq
-        |> TranslationGroup
-        |> Ok
+            byLanguage
+            |> Seq.map ^ Snd.map List.exactlyOne
+            |> Map.ofSeq
+            |> TranslationGroup
+            |> Ok
 
     let translations (TranslationGroup map) =
-        map
-        |> Map.toSeq
-        |> Seq.map snd
-        |> Seq.toList
+        map |> Map.toSeq |> Seq.map snd |> Seq.toList
 
-    let hasLanguage (language: LanguageTag) (TranslationGroup(map)) : bool = 
-        map.ContainsKey language
+    let hasLanguage (language: LanguageTag) (TranslationGroup(map)) : bool = map.ContainsKey language
 
     /// Returns all the original strings in the translation group.
-    let originalStrings (TranslationGroup(map)) : OriginalStrings = 
+    let originalStrings (TranslationGroup(map)) : OriginalStrings =
         map
         |> Map.toSeq
         |> Seq.map snd
@@ -345,35 +321,29 @@ module TranslationGroup =
 
     /// Add a language to a translation group and return the new translation.
     let addLanguage (language: LanguageTag) (TranslationGroup(map) as group) : Translation option =
-        if map.ContainsKey language then None else
-        let strings = originalStrings group
-        Some ^ Translation.createNew language strings
-        
+        if map.ContainsKey language then
+            None
+        else
+            let strings = originalStrings group
+            Some ^ Translation.createNew language strings
+
 module TranslationContent =
 
     let serialize (content: TranslationContent) =
-        
-        let json = Json.array [
-            for pair in content.Pairs ->
-                Json.array [ String ^ fst pair; String ^ snd pair ]
-        ]
+
+        let json =
+            Json.array [ for pair in content.Pairs -> Json.array [ String ^ fst pair; String ^ snd pair ] ]
 
         json |> Json.formatWith JsonFormattingOptions.Pretty
 
-    let fromTranslation (translation: Translation) : TranslationContent = 
-    
+    let fromTranslation (translation: Translation) : TranslationContent =
+
         let recordToPair (record: TranslationRecord) : (string * string) option =
             match record.Translated with
             | TranslatedString.New
-            | TranslatedString.Unused _
-                -> None
-            | TranslatedString.NeedsReview str 
-            | TranslatedString.Final str 
-                -> Some (record.Original, str)
+            | TranslatedString.Unused _ -> None
+            | TranslatedString.NeedsReview str
+            | TranslatedString.Final str -> Some(record.Original, str)
 
-        {
-            Language = translation.Language
-            Pairs = 
-                translation.Records
-                |> List.choose recordToPair
-        }
+        { Language = translation.Language
+          Pairs = translation.Records |> List.choose recordToPair }
